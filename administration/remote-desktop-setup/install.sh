@@ -3,7 +3,7 @@
 # Ubuntu Remote Desktop Setup Script
 # Supports XRDP and VNC server installation and configuration
 # Author: Assistant
-# Version: 1.0
+# Version: 1.2
 
 set -euo pipefail
 
