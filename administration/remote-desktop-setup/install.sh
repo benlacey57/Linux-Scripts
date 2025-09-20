@@ -8,15 +8,15 @@
 set -euo pipefail
 
 # Colours for output
-readonly RED='\033[0;31m'
-readonly GREEN='\033[0;32m'
-readonly YELLOW='\033[1;33m'
-readonly BLUE='\033[0;34m'
-readonly NC='\033[0m' # No Colour
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Colour
 
 # Script configuration
-readonly SCRIPT_NAME="Ubuntu Remote Desktop Setup"
-readonly LOG_FILE="/tmp/remote_desktop_setup.log"
+SCRIPT_NAME="Ubuntu Remote Desktop Setup"
+LOG_FILE="/tmp/remote_desktop_setup.log"
 
 # Function to print coloured output
 print_status() {
@@ -67,7 +67,7 @@ install_xrdp() {
     print_header "Installing XRDP..."
     
     # Install XRDP packages
-    sudo apt install -y xrdp xrdp-pulseaudio-installer
+    sudo apt install -y xrdp xorgxrdp
     
     # Add user to ssl-cert group
     sudo adduser "$USER" ssl-cert
@@ -281,7 +281,7 @@ list_firewall_backups() {
         
         if [[ -n "$backups" ]]; then
             echo "Backup files (newest first):"
-            echo "$backups" | while read -r backup; do
+            echo "$backups" | while read -rp -r backup; do
                 local filename
                 filename=$(basename "$backup")
                 local filesize
@@ -298,7 +298,7 @@ list_firewall_backups() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to restore firewall configuration
@@ -310,7 +310,7 @@ restore_firewall_config() {
     
     if [[ ! -d "$backup_dir" ]]; then
         print_error "No backup directory found"
-        read -p "Press Enter to continue..."
+        read -rp "Press Enter to continue..."
         return
     fi
     
@@ -319,7 +319,7 @@ restore_firewall_config() {
     
     if [[ -z "$backups" ]]; then
         print_error "No firewall backups found"
-        read -p "Press Enter to continue..."
+        read -rp "Press Enter to continue..."
         return
     fi
     
@@ -327,7 +327,7 @@ restore_firewall_config() {
     local counter=1
     declare -a backup_array
     
-    echo "$backups" | while read -r backup; do
+    echo "$backups" | while read -rp -r backup; do
         local filename
         filename=$(basename "$backup")
         local modification_time
@@ -340,18 +340,18 @@ restore_firewall_config() {
     echo "$((counter))) Cancel"
     echo ""
     
-    # Read backup files into array for selection
-    readarray -t backup_files <<< "$backups"
+    # read -rp backup files into array for selection
+    read -rparray -t backup_files <<< "$backups"
     
-    read -p "Select backup to restore (1-$counter): " backup_choice
+    read -rp "Select backup to restore (1-$counter): " backup_choice
     
     if [[ "$backup_choice" =~ ^[0-9]+$ ]] && [[ $backup_choice -ge 1 ]] && [[ $backup_choice -lt $counter ]]; then
-        local selected_backup="${backup_files[$((backup_choice-1))]}"
+        local selected_backup="${backup_file[$((backup_choice-1))]}"
         
         print_warning "This will reset UFW and attempt to restore the selected configuration"
         print_warning "Current firewall rules will be lost!"
         echo ""
-        read -p "Are you sure you want to continue? [y/N]: " confirm
+        read -rp "Are you sure you want to continue? [y/N]: " confirm
         
         if [[ $confirm == "y" || $confirm == "Y" ]]; then
             print_status "Creating backup of current configuration before restore..."
@@ -391,7 +391,7 @@ restore_firewall_config() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to clean old backups
@@ -403,7 +403,7 @@ clean_old_backups() {
     
     if [[ ! -d "$backup_dir" ]]; then
         print_warning "No backup directory found"
-        read -p "Press Enter to continue..."
+        read -rp "Press Enter to continue..."
         return
     fi
     
@@ -416,7 +416,7 @@ clean_old_backups() {
     echo "6) Cancel"
     echo ""
     
-    read -p "Select cleanup option (1-6): " cleanup_choice
+    read -rp "Select cleanup option (1-6): " cleanup_choice
     
     case $cleanup_choice in
         1)
@@ -442,7 +442,7 @@ clean_old_backups() {
             ;;
     esac
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Helper function to keep last N backups
@@ -470,14 +470,14 @@ cleanup_keep_last_n() {
     to_delete=$(echo "$backups" | tail -n +$((keep_count + 1)))
     
     echo "Will delete $((total_count - keep_count)) old backups:"
-    echo "$to_delete" | while read -r file; do
+    echo "$to_delete" | while read -rp -r file; do
         echo "  $(basename "$file")"
     done
     echo ""
     
-    read -p "Continue? [y/N]: " confirm
+    read -rp "Continue? [y/N]: " confirm
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
-        echo "$to_delete" | while read -r file; do
+        echo "$to_delete" | while read -rp -r file; do
             rm -f "$file" && print_status "Deleted: $(basename "$file")"
         done
         print_status "Cleanup completed - kept last $keep_count backups"
@@ -500,16 +500,16 @@ cleanup_older_than_days() {
     fi
     
     echo "Backups older than $days days:"
-    echo "$old_backups" | while read -r file; do
+    echo "$old_backups" | while read -rp -r file; do
         local modification_time
         modification_time=$(stat -c '%y' "$file" 2>/dev/null | cut -d' ' -f1)
         echo "  $(basename "$file") - $modification_time"
     done
     echo ""
     
-    read -p "Delete these backups? [y/N]: " confirm
+    read -rp "Delete these backups? [y/N]: " confirm
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
-        echo "$old_backups" | while read -r file; do
+        echo "$old_backups" | while read -rp -r file; do
             rm -f "$file" && print_status "Deleted: $(basename "$file")"
         done
         print_status "Cleanup completed"
@@ -523,7 +523,7 @@ cleanup_all_backups() {
     local backup_dir="$HOME/firewall-backups"
     
     print_warning "This will delete ALL firewall backups!"
-    read -p "Are you absolutely sure? [y/N]: " confirm
+    read -rp "Are you absolutely sure? [y/N]: " confirm
     
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
         rm -f "$backup_dir"/firewall-rules-*.txt 2>/dev/null
@@ -532,6 +532,8 @@ cleanup_all_backups() {
         print_status "Cleanup cancelled"
     fi
 }
+
+security_hardening_menu() {
     print_header "Security Hardening Options"
     echo ""
     echo "Available hardening options:"
@@ -540,7 +542,7 @@ cleanup_all_backups() {
     echo "3) Skip hardening (not recommended)"
     echo ""
     
-    read -p "Choose hardening option (1-3): " hardening_choice
+    read -rp -rp "Choose hardening option (1-3): " hardening_choice
     
     case $hardening_choice in
         1)
@@ -611,7 +613,7 @@ apply_specific_ip_hardening() {
     
     local ips=()
     while true; do
-        read -p "IP address: " ip
+        read -rp "IP address: " ip
         if [[ -z "$ip" ]]; then
             break
         fi
@@ -671,7 +673,7 @@ firewall_management() {
         echo "12) Return to main menu"
         echo ""
         
-        read -p "Enter your choice (1-12): " fw_choice
+        read -rp "Enter your choice (1-12): " fw_choice
         
         case $fw_choice in
             1)
@@ -682,11 +684,11 @@ firewall_management() {
                 ;;
             3)
                 apply_local_network_hardening
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
             4)
                 apply_specific_ip_hardening
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
             5)
                 remove_rd_firewall_rules
@@ -714,7 +716,7 @@ firewall_management() {
                 ;;
             *)
                 print_error "Invalid choice. Please try again."
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
         esac
     done
@@ -745,7 +747,7 @@ show_firewall_status() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to show all firewall rules
@@ -765,7 +767,7 @@ show_all_firewall_rules() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to remove remote desktop firewall rules
@@ -773,7 +775,7 @@ remove_rd_firewall_rules() {
     print_header "Remove Remote Desktop Firewall Rules"
     echo ""
     print_warning "This will remove all firewall rules for ports 3389 (RDP) and 5901 (VNC)"
-    read -p "Are you sure you want to continue? [y/N]: " confirm
+    read -rp "Are you sure you want to continue? [y/N]: " confirm
     
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
         if command -v ufw &> /dev/null; then
@@ -797,7 +799,7 @@ remove_rd_firewall_rules() {
         print_status "Operation cancelled"
     fi
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to enable firewall
@@ -805,7 +807,7 @@ enable_firewall() {
     print_header "Enable UFW Firewall"
     echo ""
     print_warning "Enabling firewall may block SSH connections if not configured properly"
-    read -p "Continue? [y/N]: " confirm
+    read -rp "Continue? [y/N]: " confirm
     
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
         if command -v ufw &> /dev/null; then
@@ -819,14 +821,14 @@ enable_firewall() {
         fi
     fi
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to disable firewall
 disable_firewall() {
     print_header "Disable UFW Firewall"
     echo ""
-    read -p "Are you sure you want to disable the firewall? [y/N]: " confirm
+    read -rp "Are you sure you want to disable the firewall? [y/N]: " confirm
     
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
         if command -v ufw &> /dev/null; then
@@ -837,7 +839,7 @@ disable_firewall() {
         fi
     fi
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to reset firewall
@@ -845,7 +847,7 @@ reset_firewall() {
     print_header "Reset UFW Firewall"
     echo ""
     print_warning "This will remove ALL firewall rules and reset to defaults"
-    read -p "Are you sure you want to continue? [y/N]: " confirm
+    read -rp "Are you sure you want to continue? [y/N]: " confirm
     
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
         if command -v ufw &> /dev/null; then
@@ -856,7 +858,7 @@ reset_firewall() {
         fi
     fi
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function for troubleshooting
@@ -876,7 +878,7 @@ troubleshooter() {
         echo "8) Return to main menu"
         echo ""
         
-        read -p "Select an issue to troubleshoot (1-8): " trouble_choice
+        read -rp "Select an issue to troubleshoot (1-8): " trouble_choice
         
         case $trouble_choice in
             1)
@@ -905,7 +907,7 @@ troubleshooter() {
                 ;;
             *)
                 print_error "Invalid choice. Please try again."
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
         esac
     done
@@ -974,7 +976,7 @@ troubleshoot_connection() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Additional troubleshooting functions would continue here...
@@ -1004,7 +1006,7 @@ troubleshoot_services() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Continue with more troubleshooting functions...
@@ -1040,7 +1042,7 @@ troubleshoot_authentication() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 troubleshoot_performance() {
@@ -1064,7 +1066,7 @@ troubleshoot_performance() {
     echo "4. Use lightweight desktop environment (XFCE instead of GNOME)"
     echo ""
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 troubleshoot_firewall() {
@@ -1096,7 +1098,7 @@ troubleshoot_firewall() {
     fi
     
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 run_comprehensive_diagnostic() {
@@ -1170,14 +1172,14 @@ run_comprehensive_diagnostic() {
     echo ""
     
     print_status "=== DIAGNOSTIC COMPLETE ==="
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 restart_all_services() {
     print_header "Restart All Remote Desktop Services"
     echo ""
     
-    read -p "This will restart XRDP and VNC services. Continue? [y/N]: " confirm
+    read -rp "This will restart XRDP and VNC services. Continue? [y/N]: " confirm
     if [[ $confirm == "y" || $confirm == "Y" ]]; then
         print_status "Restarting services..."
         
@@ -1196,7 +1198,7 @@ restart_all_services() {
         print_status "Operation cancelled"
     fi
     
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to uninstall remote desktop services
@@ -1204,7 +1206,7 @@ uninstall_remote_desktop() {
     print_header "Uninstalling Remote Desktop Services"
     
     echo "This will remove all remote desktop services and configurations."
-    read -p "Are you sure you want to continue? [y/N]: " confirm
+    read -rp "Are you sure you want to continue? [y/N]: " confirm
     
     if [[ $confirm != "y" && $confirm != "Y" ]]; then
         print_status "Uninstall cancelled."
@@ -1260,7 +1262,7 @@ uninstall_remote_desktop() {
     sudo systemctl daemon-reload
     
     print_header "Remote desktop services uninstalled successfully!"
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Function to show comprehensive status
@@ -1417,7 +1419,7 @@ show_status() {
     echo ""
     print_status "=== END OF STATUS REPORT ==="
     echo ""
-    read -p "Press Enter to continue..."
+    read -rp "Press Enter to continue..."
 }
 
 # Main installation menu
@@ -1437,7 +1439,7 @@ main_menu() {
         echo "8) Exit"
         echo ""
         
-        read -p "Enter your choice (1-8): " choice
+        read -rp "Enter your choice (1-8): " choice
         
         case $choice in
             1)
@@ -1446,7 +1448,7 @@ main_menu() {
                 show_network_info
                 show_mobile_apps
                 print_header "XRDP installation completed successfully!"
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
             2)
                 install_vnc
@@ -1454,7 +1456,7 @@ main_menu() {
                 show_network_info
                 show_mobile_apps
                 print_header "VNC installation completed successfully!"
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
             3)
                 install_xrdp
@@ -1463,7 +1465,7 @@ main_menu() {
                 show_network_info
                 show_mobile_apps
                 print_header "Both XRDP and VNC installation completed successfully!"
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
             4)
                 show_status
@@ -1483,7 +1485,7 @@ main_menu() {
                 ;;
             *)
                 print_error "Invalid choice. Please try again."
-                read -p "Press Enter to continue..."
+                read -rp "Press Enter to continue..."
                 ;;
         esac
     done
@@ -1497,7 +1499,7 @@ prompt_security_hardening() {
     print_warning "Your remote desktop services are now accessible to anyone who can reach your network."
     echo "It's strongly recommended to apply security hardening."
     echo ""
-    read -p "Apply security hardening now? [Y/n]: " security_choice
+    read -rp "Apply security hardening now? [Y/n]: " security_choice
     
     if [[ $security_choice != "n" && $security_choice != "N" ]]; then
         security_hardening
@@ -1519,7 +1521,7 @@ main() {
     # Check if this is first run or returning to menu
     if [[ "${1:-}" != "--menu-only" ]]; then
         # Update system on first run
-        read -p "Update system packages before proceeding? (recommended) [Y/n]: " update_choice
+        read -rp "Update system packages before proceeding? (recommended) [Y/n]: " update_choice
         if [[ $update_choice != "n" && $update_choice != "N" ]]; then
             update_system
         fi
