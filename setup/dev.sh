@@ -11,7 +11,7 @@
 # Configuration Variables
 readonly SCRIPT_NAME="dev-setup"
 readonly SCRIPT_VERSION="2.0.0"
-readonly LOG_FILE="/var/log/${SCRIPT_NAME}.log"
+readonly LOG_FILE="logs/${SCRIPT_NAME}.log"
 readonly TEMP_DIR="/tmp/${SCRIPT_NAME}"
 readonly USER_HOME="${HOME}"
 readonly NODE_VERSION="20"
@@ -98,13 +98,6 @@ print_warning() {
 check_root() {
     if [[ $EUID -eq 0 ]]; then
         print_error "This script should not be run as root for security reasons"
-        exit 1
-    fi
-}
-
-check_internet() {
-    if ! ping -c 1 google.com &> /dev/null; then
-        print_error "Internet connection required"
         exit 1
     fi
 }
@@ -559,8 +552,7 @@ main() {
     echo ""
     
     # Pre-installation checks
-    check_root
-    check_internet
+    check_roo
     create_temp_dir
     
     # Set up signal handling for cleanup
