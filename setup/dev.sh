@@ -11,7 +11,7 @@
 # Configuration Variables
 readonly SCRIPT_NAME="dev-setup"
 readonly SCRIPT_VERSION="2.0.0"
-readonly LOG_FILE="logs/${SCRIPT_NAME}.log"
+readonly LOG_FILE="../logs/${SCRIPT_NAME}.log"
 readonly TEMP_DIR="/tmp/${SCRIPT_NAME}"
 readonly USER_HOME="${HOME}"
 readonly NODE_VERSION="20"
