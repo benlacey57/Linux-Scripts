@@ -62,7 +62,7 @@ class PasswordGenerator:
             for _ in range(self.policy.get('min_digits', 2)):
                 password_chars.append(secrets.choice(digits))
         
-        if self.include_special:
+        if self.nclude_special:
             charset += self.special_chars
             # Ensure minimum special
             for _ in range(self.policy.get('min_special', 2)):
@@ -77,7 +77,6 @@ class PasswordGenerator:
         secrets.SystemRandom().shuffle(password_chars)
         
         return ''.join(password_chars)
-
 
 class FTPUserManager:
     """Manages FTP user accounts."""
@@ -169,8 +168,7 @@ class FTPUserManager:
             password = self.password_generator.generate()
         
         ftp_root = Path(self.ftp_config.get('ftp_root', '/srv/ftp'))
-        user_home = ftp_root / username
-        user_files = user_home / 'files'
+        user_dir = ftp_root / username
         
         try:
             # Create user
@@ -180,7 +178,7 @@ class FTPUserManager:
             group = self.ftp_config.get('ftp_group', 'ftpusers')
             
             subprocess.run(
-                ['useradd', '-m', '-d', str(user_home), '-s', shell, '-G', group, username],
+                ['useradd', '-m', '-d', str(user_dir), '-s', shell, '-G', group, username],
                 check=True,
                 capture_output=True
             )
@@ -200,25 +198,24 @@ class FTPUserManager:
             print(f"✓ User account created")
             
             # Create directory structure
-            print(f"📁 Setting up directories...")
+            print(f"📁 Setting up directory...")
             
-            # Create FTP directory (owned by root for chroot)
-            user_home.mkdir(parents=True, exist_ok=True)
-            os.chown(user_home, 0, 0)  # root:root
-            os.chmod(user_home, 0o755)
+            # Ensure FTP root exists (owned by root)
+            ftp_root.mkdir(parents=True, exist_ok=True)
+            os.chown(ftp_root, 0, 0)  # root:root
+            os.chmod(ftp_root, 0o755)
             
-            # Create writable files directory
-            user_files.mkdir(exist_ok=True)
+            # Create user directory (owned by user, writable)
+            user_dir.mkdir(exist_ok=True)
             
             # Get user UID/GID
             import pwd
             user_info = pwd.getpwnam(username)
-            os.chown(user_files, user_info.pw_uid, user_info.pw_gid)
-            os.chmod(user_files, 0o755)
+            os.chown(user_dir, user_info.pw_uid, user_info.pw_gid)
+            os.chmod(user_dir, 0o755)
             
-            print(f"✓ Directory structure created")
-            print(f"   Home: {user_home}")
-            print(f"   Files: {user_files}")
+            print(f"✓ Directory created")
+            print(f"   Path: {user_dir}")
             
             # Add to allowed users list
             userlist_file = Path(self.ftp_config.get('allowed_users_file', '/etc/vsftpd.userlist'))
@@ -280,14 +277,13 @@ class FTPUserManager:
                 writer = csv.writer(f)
                 
                 if not file_exists:
-                    writer.writerow(['Timestamp', 'Username', 'Password', 'Home Directory', 'Files Directory'])
+                    writer.writerow(['Timestamp', 'Username', 'Password', 'Directory'])
                 
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 ftp_root = self.ftp_config.get('ftp_root', '/srv/ftp')
-                home_dir = f"{ftp_root}/{username}"
-                files_dir = f"{ftp_root}/{username}/files"
+                user_dir = f"{ftp_root}/{username}"
                 
-                writer.writerow([timestamp, username, password, home_dir, files_dir])
+                writer.writerow([timestamp, username, password, user_dir])
             
             # Secure the credentials file
             os.chmod(credentials_file, 0o600)  # Only root can read/write
@@ -371,7 +367,7 @@ class FTPUserManager:
         except subprocess.CalledProcessError as e:
             print(f"✗ Failed to change password: {e}")
             return False, ""
-    
+
     def list_users(self):
         """List all FTP users."""
         print("\n" + "=" * 80)
@@ -392,28 +388,28 @@ class FTPUserManager:
             print("No users found")
             return
         
-        print(f"{'Username':<20} {'Home Directory':<40} {'Status'}")
+        print(f"{'Username':<20} {'Directory':<40} {'Status'}")
         print("-" * 80)
         
         for username in users:
             if self.user_exists(username):
                 ftp_root = self.ftp_config.get('ftp_root', '/srv/ftp')
-                home_dir = f"{ftp_root}/{username}"
+                user_dir = f"{ftp_root}/{username}"
                 
-                # Check if directories exist
-                if Path(home_dir).exists():
+                # Check if directory exists
+                if Path(user_dir).exists():
                     status = "✓ Active"
                 else:
-                    status = "⚠ Missing directories"
+                    status = "⚠ Missing directory"
             else:
-                home_dir = "N/A"
+                user_dir = "N/A"
                 status = "✗ User missing"
             
-            print(f"{username:<20} {home_dir:<40} {status}")
+            print(f"{username:<20} {user_dir:<40} {status}")
         
         print("\n" + "=" * 80 + "\n")
-
-      def show_user_info(self, username: str):
+    
+    def show_user_info(self, username: str):
         """Show detailed information about a user."""
         print("\n" + "=" * 80)
         print(f"USER INFORMATION: {username}".center(80))
@@ -444,26 +440,17 @@ class FTPUserManager:
             groups = stdout.strip().split(':')[-1].strip() if stdout else "N/A"
             print(f"Groups: {groups}")
             
-            # Check directories
+            # Check directory
             print(f"\nDirectory Status:")
-            home_path = Path(user_info.pw_dir)
-            files_path = home_path / 'files'
+            user_path = Path(user_info.pw_dir)
             
-            if home_path.exists():
-                stat = home_path.stat()
-                print(f"  Home: ✓ {home_path}")
-                print(f"    Owner: UID {stat.st_uid} (should be 0 for chroot)")
+            if user_path.exists():
+                stat = user_path.stat()
+                print(f"  Directory: ✓ {user_path}")
+                print(f"    Owner: UID {stat.st_uid} (should be {user_info.pw_uid})")
                 print(f"    Permissions: {oct(stat.st_mode)[-3:]}")
             else:
-                print(f"  Home: ✗ Missing - {home_path}")
-            
-            if files_path.exists():
-                stat = files_path.stat()
-                print(f"  Files: ✓ {files_path}")
-                print(f"    Owner: UID {stat.st_uid}")
-                print(f"    Permissions: {oct(stat.st_mode)[-3:]}")
-            else:
-                print(f"  Files: ✗ Missing - {files_path}")
+                print(f"  Directory: ✗ Missing - {user_path}")
             
             # Check if in allowed list
             userlist_file = Path(self.ftp_config.get('allowed_users_file', '/etc/vsftpd.userlist'))
@@ -527,9 +514,8 @@ class FTPUserManager:
                 print(f"\n📝 Credentials:")
                 print(f"   Username: {username}")
                 print(f"   Password: {generated_password}")
-                print(f"\n📁 Directories:")
-                print(f"   FTP Root: {self.ftp_config.get('ftp_root', '/srv/ftp')}/{username}")
-                print(f"   Writable: {self.ftp_config.get('ftp_root', '/srv/ftp')}/{username}/files")
+                print(f"\n📁 Directory:")
+                print(f"   {self.ftp_config.get('ftp_root', '/srv/ftp')}/{username}")
                 print(f"\n🔒 Credentials saved to: {self.logging_config.get('credentials_file', '/root/.ftp_credentials.csv')}")
                 print("\n" + "=" * 80)
                 
