@@ -1,0 +1,29 @@
+{
+  "tailscale_config": {
+    "hostname": "",
+    "accept_routes": true,
+    "accept_dns": true,
+    "shields_up": false,
+    "advertise_exit_node": false,
+    "advertise_routes": [],
+    "ssh_enabled": true,
+    "operator": ""
+  },
+  "network_config": {
+    "ipv4_enabled": true,
+    "ipv6_enabled": false,
+    "exit_node": "",
+    "exit_node_allow_lan_access": true
+  },
+  "logging": {
+    "enabled": true,
+    "log_file": "/var/log/tailscale_management.log",
+    "verbose_logging": false
+  },
+  "notifications": {
+    "enabled": false,
+    "email": "",
+    "notify_on_connect": false,
+    "notify_on_disconnect": false
+  }
+}
