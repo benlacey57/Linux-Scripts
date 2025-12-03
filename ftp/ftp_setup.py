@@ -119,8 +119,7 @@ xferlog_enable=YES
 connect_from_port_20=YES
 
 # Security settings
-chroot_local_user=YES
-allow_writeable_chroot={'YES' if self.ftp_config.get('writeable_chroot', True) else 'NO'}
+chroot_local_user=NO
 secure_chroot_dir=/var/run/vsftpd/empty
 pam_service_name=vsftpd
 
@@ -382,11 +381,13 @@ bantime = {self.security.get('ban_time_minutes', 60) * 60}
         print(f"\n🔒 Security:")
         print(f"   fail2ban: {'Enabled' if self.security.get('fail2ban_enabled') else 'Disabled'}")
         print(f"   Max login fails: {self.security.get('max_login_fails', 3)}")
+        print(f"   Chroot: Disabled (users have direct access to their directories)")
         
         print(f"\n📝 Next Steps:")
-        print(f"   1. Run ./ftp_user_manager.py to create FTP users")
-        print(f"   2. Users will be created in {self.ftp_config.get('ftp_root', '/srv/ftp')}")
-        print(f"   3. Credentials will be saved to {self.config.get('logging', {}).get('credentials_file', '/root/.ftp_credentials.csv')}")
+        print(f"   1. Run ./ftp_users.py to create FTP users")
+        print(f"   2. Users will be created as subdirectories in {self.ftp_config.get('ftp_root', '/srv/ftp')}")
+        print(f"   3. User directories: {self.ftp_config.get('ftp_root', '/srv/ftp')}/username/")
+        print(f"   4. Credentials will be saved to {self.config.get('logging', {}).get('credentials_file', '/root/.ftp_credentials.csv')}")
         print("\n" + "=" * 80 + "\n")
 
 
