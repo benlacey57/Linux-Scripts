@@ -166,7 +166,8 @@ class FTPDebugger:
             'local_enable=YES': 'Local users enabled',
             'write_enable=YES': 'Write permissions',
             'pasv_enable=YES': 'Passive mode',
-            'userlist_enable=YES': 'User list enabled'
+            'userlist_enable=YES': 'User list enabled',
+            'chroot_local_user=NO': 'Chroot disabled (correct for this setup)'
         }
         
         for setting, description in critical_settings.items():
@@ -181,6 +182,10 @@ class FTPDebugger:
         if 'listen_ipv6=YES' in config_content and 'listen=YES' in config_content:
             print("\n✗ WARNING: Both IPv4 and IPv6 listen enabled (conflict)")
             self.issues_found.append("IPv4 and IPv6 both enabled")
+        
+        if 'chroot_local_user=YES' in config_content:
+            print("\n⚠ WARNING: chroot is enabled - this may cause issues with the current setup")
+            self.warnings.append("Chroot enabled (should be disabled)")
     
     def check_user_list(self):
         """Check FTP user list configuration."""
@@ -212,39 +217,41 @@ class FTPDebugger:
             if code == 0:
                 print(f"✓ User '{username}' exists")
                 
-                # Check user's home directory
+                # Check user's directory
                 ftp_root = Path(self.ftp_config.get('ftp_root', '/srv/ftp'))
-                user_home = ftp_root / username
+                user_dir = ftp_root / username
                 
-                if user_home.exists():
-                    print(f"  ✓ Home directory: {user_home}")
+                if user_dir.exists():
+                    print(f"  ✓ Directory: {user_dir}")
                     
                     # Check permissions
-                    stat = user_home.stat()
+                    stat = user_dir.stat()
                     mode = oct(stat.st_mode)[-3:]
                     
-                    if stat.st_uid == 0:
-                        print(f"  ✓ Owned by root (required for chroot)")
-                    else:
-                        print(f"  ✗ NOT owned by root (chroot may fail)")
-                        self.issues_found.append(f"User {username} home not owned by root")
-                    
-                    # Check files directory
-                    files_dir = user_home / 'files'
-                    if files_dir.exists():
-                        print(f"  ✓ Files directory exists")
-                    else:
-                        print(f"  ⚠ Files directory missing: {files_dir}")
-                        self.warnings.append(f"User {username} files directory missing")
+                    # Get expected UID
+                    import pwd
+                    try:
+                        user_info = pwd.getpwnam(username)
+                        expected_uid = user_info.pw_uid
+                        
+                        if stat.st_uid == expected_uid:
+                            print(f"  ✓ Owned by user (UID {stat.st_uid})")
+                        else:
+                            print(f"  ⚠ Owned by UID {stat.st_uid}, expected {expected_uid}")
+                            self.warnings.append(f"User {username} directory ownership mismatch")
+                        
+                        print(f"  Permissions: {mode}")
+                    except KeyError:
+                        print(f"  ⚠ Could not verify ownership")
                 else:
-                    print(f"  ✗ Home directory missing: {user_home}")
-                    self.issues_found.append(f"User {username} home directory missing")
+                    print(f"  ✗ Directory missing: {user_dir}")
+                    self.issues_found.append(f"User {username} directory missing")
             else:
                 print(f"✗ User '{username}' does not exist in system")
                 self.issues_found.append(f"User {username} in list but not in system")
             
             print()
-
+    
     def check_permissions(self):
         """Check critical directory permissions."""
         self.print_header("PERMISSION CHECKS")
@@ -270,6 +277,20 @@ class FTPDebugger:
         else:
             print(f"  ⚠ Not owned by root")
             self.warnings.append("FTP root not owned by root")
+        
+        # Check user directories
+        print(f"\nChecking user directories...")
+        userlist_file = Path(self.ftp_config.get('allowed_users_file', '/etc/vsftpd.userlist'))
+        
+        if userlist_file.exists():
+            with open(userlist_file, 'r') as f:
+                users = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+            
+            for username in users[:5]:  # Check first 5 users
+                user_dir = ftp_root / username
+                if user_dir.exists():
+                    stat = user_dir.stat()
+                    print(f"  {username}: UID {stat.st_uid}, Permissions {oct(stat.st_mode)[-3:]}")
     
     def check_logs(self):
         """Check FTP logs for recent errors."""
@@ -292,7 +313,7 @@ class FTPDebugger:
             
             # Get last 20 lines with 'vsftpd' or 'ftp'
             code, stdout, stderr = self._run_command(
-                ['grep', '-i', 'vsftpd\|ftp', log_file]
+                ['grep', '-i', 'vsftpd\\|ftp', log_file]
             )
             
             if stdout:
@@ -344,18 +365,11 @@ class FTPDebugger:
         print("Testing FTP connection...")
         print("Note: This requires the user's password\n")
         
-        # Create FTP commands file
-        test_commands = f"""open localhost
-user {username}
-ls
-quit
-"""
-        
         print("To test manually, run:")
         print(f"  ftp localhost")
         print(f"  Username: {username}")
         print(f"  Password: <enter password>")
-        print(f"  Commands: ls, cd files, quit")
+        print(f"  Commands: ls, pwd, quit")
     
     def generate_fixes(self):
         """Generate suggested fixes for found issues."""
@@ -381,18 +395,20 @@ quit
                 port = issue.split()[3] if len(issue.split()) > 3 else 'PORT'
                 print(f"   Fix: sudo ufw allow {port}")
             
-            elif 'home directory missing' in issue.lower():
+            elif 'directory missing' in issue.lower():
                 username = issue.split()[1]
                 ftp_root = self.ftp_config.get('ftp_root', '/srv/ftp')
-                print(f"   Fix: sudo mkdir -p {ftp_root}/{username}/files")
-                print(f"        sudo chown root:root {ftp_root}/{username}")
-                print(f"        sudo chown {username}:ftpusers {ftp_root}/{username}/files")
+                print(f"   Fix: sudo mkdir -p {ftp_root}/{username}")
+                print(f"        sudo chown {username}:ftpusers {ftp_root}/{username}")
+                print(f"        sudo chmod 755 {ftp_root}/{username}")
             
-            elif 'not owned by root' in issue.lower():
-                print(f"   Fix: sudo chown root:root <directory>")
+            elif 'ownership mismatch' in issue.lower():
+                username = issue.split()[1]
+                ftp_root = self.ftp_config.get('ftp_root', '/srv/ftp')
+                print(f"   Fix: sudo chown {username}:ftpusers {ftp_root}/{username}")
             
             print()
-    
+
     def run_diagnostics(self, username: Optional[str] = None):
         """Run all diagnostic checks."""
         print("\n" + "=" * 80)
